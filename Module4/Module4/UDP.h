@@ -23,8 +23,10 @@ public:
 private:
 	bool CreateServer();
 	bool CreateClient();
+	void ShowQuitMessage();
 	const string HELLO = "hello";
 	const string CLIENT = "Client> ";
 	const string SERVER = "Server> ";
+	const string HOST = "127.0.0.1";
 	const int PORT = 1234;
 };

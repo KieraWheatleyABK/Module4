@@ -19,6 +19,11 @@ bool UDP::CreateClient()
 	return m_client != nullptr;
 }
 
+void UDP::ShowQuitMessage()
+{
+	cout << "Press q to quit." << endl;
+}
+
 int UDP::HandleServerInput()
 {
 	if (!CreateServer())
@@ -40,7 +45,7 @@ int UDP::HandleServerInput()
 					<< event.peer->address.host
 					<< ":" << event.peer->address.port
 					<< endl;
-				cout << "Press q to quit." << endl;
+				ShowQuitMessage();
 				event.peer->data = (void*)("Client");
 				{
 					ENetPacket* packet = enet_packet_create(
@@ -107,13 +112,13 @@ int UDP::HandleClientInput()
 	if (enet_host_service(m_client, &event, 5000) > 0 &&
 		event.type == ENET_EVENT_TYPE_CONNECT)
 	{
-		cout << "Connection to 127.0.0.1:" << PORT << " succeeded." << endl;
-		cout << "Press q to quit." << endl;
+		cout << "Connection to " << HOST << ":" << PORT << " succeeded." << endl;
+		ShowQuitMessage();
 	}
 	else
 	{
 		enet_peer_reset(peer);
-		cout << "Connection to 127.0.0.1:" << PORT << " failed." << endl;
+		cout << "Connection to " << HOST << ":" << PORT << " failed." << endl;
 	}
 	bool first = true;
 	while (1)
