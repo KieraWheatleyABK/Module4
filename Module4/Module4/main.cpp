@@ -1,221 +1,84 @@
 #include <enet/enet.h>
-#include <string>
 #include <iostream>
+#include <string>
 #include <thread>
+#include <chrono>
 
 using std::cout;
 using std::cin;
 using std::endl;
 using std::thread;
 using std::string;
-using std::to_string;
 
-ENetHost* NetHost = nullptr;
-ENetPeer* Peer = nullptr;
-bool IsServer = false;
-thread* PacketThread = nullptr;
-int num = 0;
-bool solved = false;
-bool first = true;
+ENetAddress address;
+ENetHost* server = nullptr;
+ENetHost* client = nullptr;
+bool messageReady = false;
+char message[999];
 
-void BroadcastMessageToClient(string message)
+void ShowWelcomeMessage()
 {
-	ENetPacket* packet = enet_packet_create(message.c_str(), strlen(message.c_str()) + 1, ENET_PACKET_FLAG_RELIABLE);
-	enet_host_broadcast(NetHost, 0, packet);
-	enet_host_flush(NetHost);
+	cout << "Welcome to the number guessing game!" << endl;
+	cout << "Try to guess a number between 1 and 10." << endl;
+	cout << "Type your chat messages below!" << endl;
+	cout << "Type q to quit." << endl << endl;
 }
 
-bool ClientGuessResponse(int guess)
+void GetGuess()
 {
-	if (guess > num)
+	cin.ignore(999, '\n');
+	while (1)
 	{
-		string message = "Too high!\n";
-		BroadcastMessageToClient(message);
-		cout << message << endl;
-		return false;
-	}
-	else if (guess < num)
-	{
-		string message = "Too low!\n";
-		BroadcastMessageToClient(message);
-		cout << message << endl;
-		return false;
-	}
-	else
-	{
-		string message = "Correct! You got it!\n";
-		BroadcastMessageToClient(message);
-		cout << message << endl;
-		solved = true;
-		return true;
+		cin.getline(message, 999, '\n');
+		messageReady = true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
 }
 
-void SendGuess(ENetEvent event)
-{
-	int guess;
-	cout << "Enter a guess between 1 and 10: ";
-	cin >> guess;
-	string message = to_string(guess);
-	if (guess >= 1 && guess <= 10)
-	{
-		if (strlen(message.c_str()) > 0)
-		{
-			ENetPacket* packet = enet_packet_create(message.c_str(), strlen(message.c_str()) + 1, ENET_PACKET_FLAG_RELIABLE);
-			enet_peer_send(event.peer, 0, packet);
-		}
-	}
-}
-
-//can pass in a peer connection if wanting to limit
 bool CreateServer()
 {
-	ENetAddress address;
 	address.host = ENET_HOST_ANY;
 	address.port = 1234;
-	NetHost = enet_host_create(&address /* the address to bind the server host to */,
-		32      /* allow up to 32 clients and/or outgoing connections */,
-		2      /* allow up to 2 channels to be used, 0 and 1 */,
-		0      /* assume any amount of incoming bandwidth */,
-		0      /* assume any amount of outgoing bandwidth */);
-	srand(time(0)); //seed random number generator
-	num = rand() % 10 + 1;
-	return NetHost != nullptr;
+	server = enet_host_create(&address, 32, 3, 0, 0);
+	return server != nullptr;
 }
 
 bool CreateClient()
 {
-	NetHost = enet_host_create(NULL /* create a client host */,
-		1 /* only allow 1 outgoing connection */,
-		2 /* allow up 2 channels to be used, 0 and 1 */,
-		0 /* assume any amount of incoming bandwidth */,
-		0 /* assume any amount of outgoing bandwidth */);
-	return NetHost != nullptr;
-}
-
-bool AttemptConnectToServer()
-{
-	ENetAddress address;
-	/* Connect to some.server.net:1234. */
-	enet_address_set_host(&address, "127.0.0.1");
-	address.port = 1234;
-	/* Initiate the connection, allocating the two channels 0 and 1. */
-	Peer = enet_host_connect(NetHost, &address, 2, 0);
-	return Peer != nullptr;
-}
-
-void HandleReceivePacket(const ENetEvent& event)
-{
-	/* Clean up the packet now that we're done using it. */
-	enet_packet_destroy(event.packet);
-	{
-		enet_host_flush(NetHost);
-	}
-}
-
-void ServerProcessPackets()
-{
-	while (!solved)
-	{
-		ENetEvent event;
-		while (enet_host_service(NetHost, &event, 1000) > 0)
-		{
-			switch (event.type)
-			{
-				case ENET_EVENT_TYPE_CONNECT:
-				{
-					cout << "A new client connected from "
-						<< event.peer->address.host
-						<< ":" << event.peer->address.port
-						<< endl;
-					/* Store any relevant client information here. */
-					event.peer->data = (void*)("Client information");
-					break;
-				}
-				case ENET_EVENT_TYPE_RECEIVE:
-				{
-					int temp = *(event.packet->data);
-					int guess = temp - 48;
-					bool response = ClientGuessResponse(guess);
-					string s_response = to_string((int)response);
-					if (strlen(s_response.c_str()) > 0 && s_response == "0")
-					{
-						ENetPacket* packet = enet_packet_create(s_response.c_str(), strlen(s_response.c_str()) + 1, ENET_PACKET_FLAG_RELIABLE);
-						enet_peer_send(event.peer, 0, packet);
-					}
-					HandleReceivePacket(event);
-					break;
-				}
-				case ENET_EVENT_TYPE_DISCONNECT:
-				{
-					cout << (char*)event.peer->data << "disconnected." << endl;
-					/* Reset the peer's client information. */
-					event.peer->data = NULL;
-					//notify remaining player that the game is done due to player leaving
-					break;
-				}
-			}
-		}
-	}
-}
-
-void ClientProcessPackets()
-{
-	while (!solved)
-	{
-		ENetEvent event;
-		/* Wait up to 1000 milliseconds for an event. */
-		while (enet_host_service(NetHost, &event, 1000) > 0)
-		{
-			switch (event.type)
-			{
-				case ENET_EVENT_TYPE_CONNECT:
-				{
-					cout << "Connection succeeded " << endl;
-					break;
-				}
-				case ENET_EVENT_TYPE_RECEIVE:
-				{
-					SendGuess(event);
-					HandleReceivePacket(event);
-					break;
-				}
-			}
-			if (first)
-			{
-				SendGuess(event);
-				first = false;
-			}
-		}
-	}
+	client = enet_host_create(NULL, 3, 3, 0, 0);
+	return client != nullptr;
 }
 
 int main(int argc, char** argv)
 {
+	// Initial Setup
 	if (enet_initialize() != 0)
 	{
 		fprintf(stderr, "An error occurred while initializing ENet.\n");
 		cout << "An error occurred while initializing ENet." << endl;
 		return EXIT_FAILURE;
 	}
-	atexit(enet_deinitialize);
 	cout << "1) Create Server " << endl;
-	cout << "2) Create Client " << endl;
+	cout << "2) Create Client " << endl << endl;
 	int UserInput;
 	cin >> UserInput;
+	ShowWelcomeMessage();
+	thread FirstThread(GetGuess);
+	FirstThread.detach();
+	ENetAddress address;
+	ENetEvent event;
+	ENetPacket* packet;
+	// Connections Setup
 	if (UserInput == 1)
 	{
 		if (!CreateServer())
 		{
 			fprintf(stderr,
-				"An error occurred while trying to create an ENet server.\n");
+				"An error occurred while trying to create an ENet server host.\n");
 			exit(EXIT_FAILURE);
 		}
-		IsServer = true;
-		cout << "waiting for players to join..." << endl;
-		PacketThread = new thread(ServerProcessPackets);
 	}
-	else if (UserInput == 2)
+	if (UserInput == 2)
 	{
 		if (!CreateClient())
 		{
@@ -223,27 +86,119 @@ int main(int argc, char** argv)
 				"An error occurred while trying to create an ENet client host.\n");
 			exit(EXIT_FAILURE);
 		}
-		// ENetEvent event;
-		if (!AttemptConnectToServer())
+		ENetPeer* peer;
+		enet_address_set_host(&address, "127.0.0.1");
+		address.port = 1234;
+		peer = enet_host_connect(client, &address, 2, 0);
+		if (peer == NULL)
 		{
-			fprintf(stderr,
-				"No available peers for initiating an ENet connection.\n");
+			fprintf(stderr, "No available peers for initiating an ENet connection.\n");
 			exit(EXIT_FAILURE);
 		}
-		PacketThread = new thread(ClientProcessPackets);
+		if (enet_host_service(client, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT)
+		{
+			cout << "Connection to 127.0.0.1:1234 succeeded." << endl;
+		}
+		else
+		{
+			enet_peer_reset(peer);
+			cout << "Connection to 127.0.0.1:1234 failed." << endl;
+		}
 	}
-	else
+	// Host Code
+	if (UserInput == 1)
 	{
-		cout << "Invalid Input" << endl;
+		srand((unsigned int)time(0));
+		int randomNumber = rand() % 10 + 1;
+		char secretNumber = '0' + randomNumber;
+		cout << "The secret number is: " << secretNumber << endl;
+		string received;
+		char firstCharacter;
+		while (1)
+		{
+			if (message[0] == 'q')
+			{
+				cout << endl << endl << "Exiting Program" << endl << endl;
+				return 0;
+			}
+			if (messageReady)
+			{
+				string msg = message;
+				packet = enet_packet_create(msg.c_str(), msg.length() + 1, ENET_PACKET_FLAG_RELIABLE);
+				enet_host_broadcast(server, 0, packet);
+				enet_host_flush(server);
+				messageReady = false;
+			}
+			while (enet_host_service(server, &event, 500) > 0)
+			{
+				switch (event.type)
+				{
+				case ENET_EVENT_TYPE_CONNECT:
+					cout << "A new client connected. " << endl;
+					event.peer->data = (void*)("Client information");
+					break;
+				case ENET_EVENT_TYPE_DISCONNECT:
+					cout << (char*)event.peer->data << "disconnected." << endl;
+					event.peer->data = NULL;
+					break;
+				case ENET_EVENT_TYPE_RECEIVE:
+					received = (char*)event.packet->data;
+					firstCharacter = received.at(0);
+					cout << "Incoming Guess: " << firstCharacter << endl;
+					enet_packet_destroy(event.packet);
+					if (firstCharacter == secretNumber)
+					{
+						cout << endl << "THE NUMBER WAS GUESSED!" << endl;
+						ENetPacket* packet;
+						string msg = "WE HAVE A WINNER!";
+						packet = enet_packet_create(msg.c_str(), msg.length() + 1, ENET_PACKET_FLAG_RELIABLE);
+						enet_host_broadcast(server, 0, packet);
+						enet_host_flush(server);
+						messageReady = false;
+						return 0;
+					}
+					break;
+				}
+			}
+		}
 	}
-	if (PacketThread)
+	// Client Code
+	if (UserInput == 2)
 	{
-		PacketThread->join();
+		string received;
+		while (1)
+		{
+			if (message[0] == 'q')
+			{
+				cout << endl << endl << "Exiting Program" << endl << endl;
+				return 0;
+			}
+			if (messageReady)
+			{
+				string msg = message;
+				packet = enet_packet_create(msg.c_str(), msg.length() + 1, ENET_PACKET_FLAG_RELIABLE);
+				enet_host_broadcast(client, 0, packet);
+				enet_host_flush(client);
+				messageReady = false;
+			}
+			while (enet_host_service(client, &event, 500) > 0)
+			{
+				switch (event.type)
+				{
+				case ENET_EVENT_TYPE_RECEIVE:
+					received = (char*)event.packet->data;
+					cout << received << endl;
+					enet_packet_destroy(event.packet);
+					if (received == "WE HAVE A WINNER!")
+						return 0;
+				}
+			}
+		}
 	}
-	delete PacketThread;
-	if (NetHost != nullptr)
-	{
-		enet_host_destroy(NetHost);
-	}
+	// Post-Program Clean-up
+	if (server != nullptr)
+		enet_host_destroy(server);
+	if (client != nullptr)
+		enet_host_destroy(client);
 	return EXIT_SUCCESS;
 }
