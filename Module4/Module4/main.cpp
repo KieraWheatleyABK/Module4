@@ -18,43 +18,6 @@ int num = 0;
 bool solved = false;
 bool first = true;
 
-enum PacketHeaderTypes
-{
-	PHT_Invalid = 0,
-	PHT_IsDead,
-	PHT_Position,
-	PHT_Count
-};
-
-struct GamePacket
-{
-	GamePacket() {}
-	PacketHeaderTypes Type = PHT_Invalid;
-};
-
-struct IsDeadPacket : public GamePacket
-{
-	IsDeadPacket()
-	{
-		Type = PHT_IsDead;
-	}
-
-	int playerId = 0;
-	bool IsDead = false;
-};
-
-struct PositionPacket : public GamePacket
-{
-	PositionPacket()
-	{
-		Type = PHT_Position;
-	}
-
-	int playerId = 0;
-	int x = 0;
-	int y = 0;
-};
-
 void BroadcastMessageToClient(string message)
 {
 	ENetPacket* packet = enet_packet_create(message.c_str(), strlen(message.c_str()) + 1, ENET_PACKET_FLAG_RELIABLE);
@@ -143,50 +106,11 @@ bool AttemptConnectToServer()
 
 void HandleReceivePacket(const ENetEvent& event)
 {
-	/*GamePacket* RecGamePacket = (GamePacket*)(event.packet->data);
-	if (RecGamePacket)
-	{
-		cout << "Received Game Packet " << endl;
-
-		if (RecGamePacket->Type == PHT_IsDead)
-		{
-			cout << "u dead?" << endl;
-			IsDeadPacket* DeadGamePacket = (IsDeadPacket*)(event.packet->data);
-			if (DeadGamePacket)
-			{
-				string response = (DeadGamePacket->IsDead ? "yeah" : "no");
-				cout << response << endl;
-			}
-		}
-	}
-	else
-	{
-		cout << "Invalid Packet " << endl;
-	}*/
-
 	/* Clean up the packet now that we're done using it. */
 	enet_packet_destroy(event.packet);
 	{
 		enet_host_flush(NetHost);
 	}
-}
-
-void BroadcastIsDeadPacket()
-{
-	IsDeadPacket* DeadPacket = new IsDeadPacket();
-	DeadPacket->IsDead = true;
-	ENetPacket* packet = enet_packet_create(DeadPacket,
-		sizeof(IsDeadPacket),
-		ENET_PACKET_FLAG_RELIABLE);
-
-	/* One could also broadcast the packet by         */
-	enet_host_broadcast(NetHost, 0, packet);
-	//enet_peer_send(event.peer, 0, packet);
-
-	/* One could just use enet_host_service() instead. */
-	//enet_host_service();
-	enet_host_flush(NetHost);
-	delete DeadPacket;
 }
 
 void ServerProcessPackets()
@@ -205,7 +129,6 @@ void ServerProcessPackets()
 					<< endl;
 				/* Store any relevant client information here. */
 				event.peer->data = (void*)("Client information");
-				BroadcastIsDeadPacket();
 				break;
 			case ENET_EVENT_TYPE_RECEIVE:
 			{
