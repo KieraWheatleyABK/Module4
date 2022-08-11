@@ -9,6 +9,8 @@ using std::cin;
 using std::endl;
 using std::thread;
 using std::string;
+using std::this_thread::sleep_for;
+using std::chrono::milliseconds;
 
 ENetAddress address;
 ENetHost* server = nullptr;
@@ -31,7 +33,7 @@ void GetGuess()
 	{
 		cin.getline(message, 999, '\n');
 		messageReady = true;
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		sleep_for(milliseconds(500));
 	}
 }
 
