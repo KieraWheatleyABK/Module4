@@ -122,34 +122,38 @@ void ServerProcessPackets()
 		{
 			switch (event.type)
 			{
-			case ENET_EVENT_TYPE_CONNECT:
-				cout << "A new client connected from "
-					<< event.peer->address.host
-					<< ":" << event.peer->address.port
-					<< endl;
-				/* Store any relevant client information here. */
-				event.peer->data = (void*)("Client information");
-				break;
-			case ENET_EVENT_TYPE_RECEIVE:
-			{
-				int temp = *(event.packet->data);
-				int guess = temp - 48;
-				bool response = ClientGuessResponse(guess);
-				string s_response = to_string((int)response);
-				if (strlen(s_response.c_str()) > 0 && s_response == "0")
+				case ENET_EVENT_TYPE_CONNECT:
 				{
-					ENetPacket* packet = enet_packet_create(s_response.c_str(), strlen(s_response.c_str()) + 1, ENET_PACKET_FLAG_RELIABLE);
-					enet_peer_send(event.peer, 0, packet);
+					cout << "A new client connected from "
+						<< event.peer->address.host
+						<< ":" << event.peer->address.port
+						<< endl;
+					/* Store any relevant client information here. */
+					event.peer->data = (void*)("Client information");
+					break;
 				}
-				HandleReceivePacket(event);
-			}
-			break;
-
-			case ENET_EVENT_TYPE_DISCONNECT:
-				cout << (char*)event.peer->data << "disconnected." << endl;
-				/* Reset the peer's client information. */
-				event.peer->data = NULL;
-				//notify remaining player that the game is done due to player leaving
+				case ENET_EVENT_TYPE_RECEIVE:
+				{
+					int temp = *(event.packet->data);
+					int guess = temp - 48;
+					bool response = ClientGuessResponse(guess);
+					string s_response = to_string((int)response);
+					if (strlen(s_response.c_str()) > 0 && s_response == "0")
+					{
+						ENetPacket* packet = enet_packet_create(s_response.c_str(), strlen(s_response.c_str()) + 1, ENET_PACKET_FLAG_RELIABLE);
+						enet_peer_send(event.peer, 0, packet);
+					}
+					HandleReceivePacket(event);
+					break;
+				}
+				case ENET_EVENT_TYPE_DISCONNECT:
+				{
+					cout << (char*)event.peer->data << "disconnected." << endl;
+					/* Reset the peer's client information. */
+					event.peer->data = NULL;
+					//notify remaining player that the game is done due to player leaving
+					break;
+				}
 			}
 		}
 	}
@@ -165,13 +169,17 @@ void ClientProcessPackets()
 		{
 			switch (event.type)
 			{
-			case ENET_EVENT_TYPE_CONNECT:
-				cout << "Connection succeeded " << endl;
-				break;
-			case ENET_EVENT_TYPE_RECEIVE:
-				SendGuess(event);
-				HandleReceivePacket(event);
-				break;
+				case ENET_EVENT_TYPE_CONNECT:
+				{
+					cout << "Connection succeeded " << endl;
+					break;
+				}
+				case ENET_EVENT_TYPE_RECEIVE:
+				{
+					SendGuess(event);
+					HandleReceivePacket(event);
+					break;
+				}
 			}
 			if (first)
 			{
@@ -197,15 +205,12 @@ int main(int argc, char** argv)
 	cin >> UserInput;
 	if (UserInput == 1)
 	{
-		//How many players?
-
 		if (!CreateServer())
 		{
 			fprintf(stderr,
 				"An error occurred while trying to create an ENet server.\n");
 			exit(EXIT_FAILURE);
 		}
-
 		IsServer = true;
 		cout << "waiting for players to join..." << endl;
 		PacketThread = new thread(ServerProcessPackets);
@@ -226,11 +231,6 @@ int main(int argc, char** argv)
 			exit(EXIT_FAILURE);
 		}
 		PacketThread = new thread(ClientProcessPackets);
-		//handle possible connection failure
-		{
-			//enet_peer_reset(Peer);
-			//cout << "Connection to 127.0.0.1:1234 failed." << endl;
-		}
 	}
 	else
 	{
